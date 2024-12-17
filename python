@@ -144,3 +144,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+chrome_options.add_argument('--proxy-server=http://your_proxy_here')
+
