@@ -1,0 +1,146 @@
+import time
+import random
+import csv
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.options import Options
+from fake_useragent import UserAgent
+
+# Function to set up the browser with proxy and random user-agent
+def setup_browser():
+    # Set options for the Chrome WebDriver
+    chrome_options = Options()
+    user_agent = UserAgent().random  # Random User-Agent to avoid detection
+    chrome_options.add_argument(f"user-agent={user_agent}")
+    
+    # You can set proxies here for using rotating IPs
+    # Example: chrome_options.add_argument('--proxy-server=http://your_proxy_here')
+    
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
+
+# Function to scrape product data from a page
+def scrape_products(driver, url):
+    driver.get(url)
+    time.sleep(3)
+    
+    # Initialize lists to store the extracted data
+    product_names = []
+    prices = []
+    brands = []
+    sellers = []
+    ratings = []
+    product_links = []
+    
+    # Scroll to load all products
+    for _ in range(5):  # Scroll 5 times to load more products
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
+
+    # Locate the products on the page
+    products = driver.find_elements(By.XPATH, '//div[@class="product-item"]')
+    
+    for product in products:
+        try:
+            name = product.find_element(By.XPATH, './/a[@class="product-link"]').text
+            price = product.find_element(By.XPATH, './/span[@class="price-value"]').text
+            brand = product.find_element(By.XPATH, './/span[@class="brand-name"]').text
+            seller = product.find_element(By.XPATH, './/div[@class="seller-name"]').text
+            rating = product.find_element(By.XPATH, './/div[@class="rating-stars"]').get_attribute('aria-label')
+            link = product.find_element(By.XPATH, './/a[@class="product-link"]').get_attribute('href')
+            
+            product_names.append(name)
+            prices.append(price)
+            brands.append(brand)
+            sellers.append(seller)
+            ratings.append(rating)
+            product_links.append(link)
+            
+        except Exception as e:
+            print(f"Error extracting product details: {e}")
+            continue
+    
+    return product_names, prices, brands, sellers, ratings, product_links
+
+# Function to save data to CSV
+def save_to_csv(data, filename='scraped_data.csv'):
+    header = ['Product Name', 'Price', 'Brand', 'Seller', 'Rating', 'Link']
+    with open(filename, 'w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(header)
+        writer.writerows(zip(*data))
+
+# Function to analyze and generate insights
+def analyze_data(filename='scraped_data.csv'):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    
+    df = pd.read_csv(filename)
+    
+    # Convert prices to numeric (handle currency signs and commas)
+    df['Price'] = df['Price'].replace({'AED': '', ',': ''}, regex=True).astype(float)
+    
+    # Most expensive product
+    most_expensive = df.loc[df['Price'].idxmax()]
+    
+    # Cheapest product
+    cheapest = df.loc[df['Price'].idxmin()]
+    
+    # Number of products by each brand
+    brand_counts = df['Brand'].value_counts()
+    
+    # Number of products by each seller
+    seller_counts = df['Seller'].value_counts()
+    
+    # Visualizations
+    brand_counts.plot(kind='bar', title='Number of Products by Brand')
+    plt.show()
+    
+    seller_counts.plot(kind='bar', title='Number of Products by Seller')
+    plt.show()
+    
+    # Display the analysis
+    print(f"Most expensive product: {most_expensive['Product Name']} - {most_expensive['Price']} AED")
+    print(f"Cheapest product: {cheapest['Product Name']} - {cheapest['Price']} AED")
+    print("Number of products by each brand:")
+    print(brand_counts)
+    print("Number of products by each seller:")
+    print(seller_counts)
+
+# Main function to run the scraper
+def main():
+    url = 'https://www.noon.com/uae-en/sports-and-outdoors/exercise-and-fitness/yoga-16328/'
+    
+    # Initialize the browser
+    driver = setup_browser()
+
+    all_product_names = []
+    all_prices = []
+    all_brands = []
+    all_sellers = []
+    all_ratings = []
+    all_product_links = []
+    
+    # Scrape data
+    for page in range(1, 6):  # Scraping first 5 pages
+        print(f"Scraping page {page}...")
+        page_url = f"{url}?page={page}"
+        product_data = scrape_products(driver, page_url)
+        all_product_names.extend(product_data[0])
+        all_prices.extend(product_data[1])
+        all_brands.extend(product_data[2])
+        all_sellers.extend(product_data[3])
+        all_ratings.extend(product_data[4])
+        all_product_links.extend(product_data[5])
+    
+    # Save data to CSV
+    save_to_csv([all_product_names, all_prices, all_brands, all_sellers, all_ratings, all_product_links])
+
+    # Analyze data
+    analyze_data()
+    
+    driver.quit()
+
+if __name__ == '__main__':
+    main()
